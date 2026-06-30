@@ -24,7 +24,7 @@ export class DeepgramSttProvider implements SttProvider {
     this.onTranscriptCallback = onTranscript;
     this.isStopped = false;
 
-    const apiKey = process.env.DEEPGRAM_API_KEY || '';
+    const apiKey = config.deepgram.apiKey;
     if (!apiKey) {
       console.warn("⚠️ Warning: DEEPGRAM_API_KEY is not set. Deepgram connections will fail.");
     }

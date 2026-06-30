@@ -23,6 +23,16 @@ if (missingEnv.length > 0) {
   console.warn(`Make sure to populate your .env file before running in production/test.`);
 }
 
+const deepgramKey = (process.env.DEEPGRAM_API_KEY || '').trim();
+if (deepgramKey) {
+  const masked = deepgramKey.length > 8 
+    ? `${deepgramKey.slice(0, 4)}...${deepgramKey.slice(-4)}` 
+    : '****';
+  console.log(`[Config] 🔑 DEEPGRAM_API_KEY is present: ${masked}`);
+} else {
+  console.warn(`[Config] ⚠️ Warning: DEEPGRAM_API_KEY is missing or empty.`);
+}
+
 function getEnv(key: string, defaultValue: string = ''): string {
   const value = process.env[key];
   return value ? value.trim() : defaultValue;
@@ -32,6 +42,9 @@ export const config = {
   port: parseInt(getEnv('PORT', '3000'), 10),
   publicUrl: getEnv('PUBLIC_URL'),
   sttProvider: getEnv('STT_PROVIDER', 'aws'), // 'aws' or 'deepgram'
+  deepgram: {
+    apiKey: getEnv('DEEPGRAM_API_KEY'),
+  },
   twilio: {
     accountSid: getEnv('TWILIO_ACCOUNT_SID'),
     authToken: getEnv('TWILIO_AUTH_TOKEN'),
