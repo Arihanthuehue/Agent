@@ -393,24 +393,7 @@ wss.on('connection', (ws) => {
   });
 });
 
-/**
- * Triggers instant barge-in response cancellation when user speech start is detected.
- */
-async function handleInterruption(session: CallSession, twilioWs: WebSocket) {
-  if (session.agentIsSpeaking) {
-    console.log(`[Server] Barge-in! Speech start detected. Stopping agent response for call ${session.callSid}...`);
-    session.ttsInterrupted = true;
-    sessionManager.interruptAgent(session);
-    
-    // Command Twilio to discard all queued TTS audio on the call
-    if (session.streamSid) {
-      twilioWs.send(JSON.stringify({
-        event: 'clear',
-        streamSid: session.streamSid,
-      }));
-    }
-  }
-}
+
 
 /**
  * Handles speech transcript segments from the active STT provider.
