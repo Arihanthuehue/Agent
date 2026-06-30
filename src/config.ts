@@ -23,33 +23,38 @@ if (missingEnv.length > 0) {
   console.warn(`Make sure to populate your .env file before running in production/test.`);
 }
 
+function getEnv(key: string, defaultValue: string = ''): string {
+  const value = process.env[key];
+  return value ? value.trim() : defaultValue;
+}
+
 export const config = {
-  port: parseInt(process.env.PORT || '3000', 10),
-  publicUrl: process.env.PUBLIC_URL || '',
-  sttProvider: process.env.STT_PROVIDER || 'aws', // 'aws' or 'deepgram'
+  port: parseInt(getEnv('PORT', '3000'), 10),
+  publicUrl: getEnv('PUBLIC_URL'),
+  sttProvider: getEnv('STT_PROVIDER', 'aws'), // 'aws' or 'deepgram'
   twilio: {
-    accountSid: process.env.TWILIO_ACCOUNT_SID || '',
-    authToken: process.env.TWILIO_AUTH_TOKEN || '',
-    phoneNumber: process.env.TWILIO_PHONE_NUMBER || '',
+    accountSid: getEnv('TWILIO_ACCOUNT_SID'),
+    authToken: getEnv('TWILIO_AUTH_TOKEN'),
+    phoneNumber: getEnv('TWILIO_PHONE_NUMBER'),
   },
   aws: {
-    region: process.env.AWS_REGION || 'us-east-1',
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
-    candidateLanguages: (process.env.CANDIDATE_LANGUAGES || 'en-US,hi-IN,es-US,fr-FR,ar-SA,ta-IN,te-IN,bn-IN,pt-BR,de-DE,zh-CN,ja-JP').split(','),
+    region: getEnv('AWS_REGION', 'us-east-1'),
+    accessKeyId: getEnv('AWS_ACCESS_KEY_ID'),
+    secretAccessKey: getEnv('AWS_SECRET_ACCESS_KEY'),
+    candidateLanguages: getEnv('CANDIDATE_LANGUAGES', 'en-US,hi-IN,es-US,fr-FR,ar-SA,ta-IN,te-IN,bn-IN,pt-BR,de-DE,zh-CN,ja-JP').split(','),
   },
   gemini: {
-    apiKey: process.env.GEMINI_API_KEY || '',
-    model: process.env.GEMINI_MODEL || 'gemini-3.5-flash',
+    apiKey: getEnv('GEMINI_API_KEY'),
+    model: getEnv('GEMINI_MODEL', 'gemini-3.5-flash'),
   },
   elevenlabs: {
-    apiKey: process.env.ELEVENLABS_API_KEY || '',
-    voiceId: process.env.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM',
+    apiKey: getEnv('ELEVENLABS_API_KEY'),
+    voiceId: getEnv('ELEVENLABS_VOICE_ID', '21m00Tcm4TlvDq8ikWAM'),
     modelId: 'eleven_flash_v2_5',
   },
   supabase: {
-    url: process.env.SUPABASE_URL || '',
-    serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
+    url: getEnv('SUPABASE_URL'),
+    serviceRoleKey: getEnv('SUPABASE_SERVICE_ROLE_KEY'),
   },
 };
 export type Config = typeof config;
