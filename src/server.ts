@@ -1,4 +1,5 @@
 import express from 'express';
+import path from 'path';
 import WebSocket, { Server as WebSocketServer } from 'ws';
 import http from 'http';
 import cors from 'cors';
@@ -37,8 +38,10 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Root health-check endpoint
-app.get('/', (req, res) => {
+app.use(express.static(path.join(__dirname, '../frontend/dist')));
+
+// Health check endpoint
+app.get('/health', (req, res) => {
   res.json({ status: "healthy", message: "AI Voice Calling Agent Backend is running." });
 });
 
@@ -278,6 +281,15 @@ app.get('/calls/:id/transcript', async (req, res) => {
       error: 'Failed to prepare transcript download.',
       details: error.message || error
     });
+  }
+});
+
+// Fallback wildcard route to serve React SPA frontend for client-side routing
+app.get('*', (req, res, next) => {
+  if (req.accepts('html')) {
+    res.sendFile(path.join(__dirname, '../frontend/dist/index.html'));
+  } else {
+    next();
   }
 });
 

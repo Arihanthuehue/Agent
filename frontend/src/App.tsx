@@ -3,7 +3,7 @@ import './App.css';
 import { NewCall } from './components/NewCall';
 import { CallHistory } from './components/CallHistory';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || window.location.origin;
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'new-call' | 'history'>('new-call');
