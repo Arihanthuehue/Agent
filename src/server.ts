@@ -37,6 +37,11 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Root health-check endpoint
+app.get('/', (req, res) => {
+  res.json({ status: "healthy", message: "AI Voice Calling Agent Backend is running." });
+});
+
 const server = http.createServer(app);
 const wss = new WebSocketServer({ noServer: true });
 
