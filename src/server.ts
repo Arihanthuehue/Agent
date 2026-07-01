@@ -483,6 +483,12 @@ async function handleSpeechTranscript(
   if (genuine) {
     console.log(`[Silence Timer] ⏱️ Resetting silence timer for call ${session.callSid} due to genuine user speech.`);
     clearSilenceTimer(session);
+    const pState = playbackStates.get(session.callSid);
+    if (pState && pState.activePlaybackTimerId) {
+      console.log(`[Silence Timer] ⏱️ Cancelling pending agent playback timer for call ${session.callSid}`);
+      clearTimeout(pState.activePlaybackTimerId);
+      pState.activePlaybackTimerId = undefined;
+    }
     session.consecutiveSilenceCount = 0;
   } else {
     console.log(`[Silence Timer] ⏱️ Ignoring non-genuine user speech for call ${session.callSid}. Silence timer remains active.`);
@@ -546,6 +552,9 @@ async function handleSpeechTranscript(
     try {
       // Connect ElevenLabs TTS stream, passing the language code derived from user transcription
       const ttsStream = await createTtsStream(session, twilioWs, detectedLanguage, () => {
+        playbackStates.set(session.callSid, {
+          playbackStartTime: Date.now()
+        });
         // Triggered when first audio chunk arrives from ElevenLabs
         if (!hasLoggedLatency && firstGeminiTokenTime > 0) {
           hasLoggedLatency = true;
@@ -565,8 +574,28 @@ async function handleSpeechTranscript(
             await safeCleanupSession(session);
           }, 3000);
         } else {
-          session.agentIsSpeaking = false;
-          resetSilenceTimer(session, twilioWs);
+          const pState = playbackStates.get(session.callSid) || {};
+          const durationSec = estimateAudioDuration(fullReply);
+          const elapsed = Date.now() - (pState.playbackStartTime || Date.now());
+          const delayMs = Math.max(0, (durationSec * 1000) - elapsed);
+          
+          console.log(`[Server] Estimated speech duration: ${durationSec.toFixed(2)}s. Elapsed: ${(elapsed/1000).toFixed(2)}s. Delaying silence timer arm by ${delayMs}ms.`);
+          
+          if (pState.activePlaybackTimerId) {
+            clearTimeout(pState.activePlaybackTimerId);
+          }
+          
+          pState.activePlaybackTimerId = setTimeout(() => {
+            pState.activePlaybackTimerId = undefined;
+            if (session.agentIsSpeaking && !session.ttsInterrupted) {
+              session.agentIsSpeaking = false;
+              const gracePeriodSec = Math.max(4, 4 + (durationSec - 10) * 0.5);
+              console.log(`[Server] Speech playback finished. Grace period: ${gracePeriodSec.toFixed(2)}s.`);
+              resetSilenceTimer(session, twilioWs, gracePeriodSec * 1000);
+            }
+          }, delayMs);
+          
+          playbackStates.set(session.callSid, pState);
         }
       });
 
@@ -625,6 +654,25 @@ async function handleSpeechTranscript(
   }
 }
 
+/**
+ * Estimates the duration of a spoken agent turn based on character and word counts.
+ */
+function estimateAudioDuration(text: string): number {
+  const cleanText = text.replace(/\[END_CALL\]/g, '').trim();
+  if (cleanText.length === 0) return 0;
+  const words = cleanText.split(/\s+/).length;
+  const durationFromWords = words / 2.3; // ~2.3 words per second
+  const durationFromChars = cleanText.length / 14; // ~14 chars per second
+  return Math.max(1.5, (durationFromWords + durationFromChars) / 2);
+}
+
+// Map to track real-time playback states for active sessions
+interface PlaybackState {
+  playbackStartTime?: number;
+  activePlaybackTimerId?: NodeJS.Timeout;
+}
+const playbackStates = new Map<string, PlaybackState>();
+
 function clearSilenceTimer(session: CallSession) {
   if (session.silenceTimeoutId) {
     console.log(`[Silence Timer] ⏱️ Clearing active timer for call ${session.callSid}`);
@@ -633,7 +681,7 @@ function clearSilenceTimer(session: CallSession) {
   }
 }
 
-function resetSilenceTimer(session: CallSession, twilioWs: WebSocket) {
+function resetSilenceTimer(session: CallSession, twilioWs: WebSocket, gracePeriodMs: number = 0) {
   clearSilenceTimer(session);
 
   // Do not run silence timer if agent is speaking or the opening line is playing
@@ -642,11 +690,12 @@ function resetSilenceTimer(session: CallSession, twilioWs: WebSocket) {
     return;
   }
 
-  console.log(`[Silence Timer] ⏱️ Armed, will fire in ${SILENCE_TIMEOUT / 1000}s if no genuine speech detected for call ${session.callSid}`);
+  const timeoutDuration = SILENCE_TIMEOUT + gracePeriodMs;
+  console.log(`[Silence Timer] ⏱️ Armed (Grace Period: ${(gracePeriodMs / 1000).toFixed(2)}s, Silence Timeout: ${SILENCE_TIMEOUT / 1000}s). Will fire in ${(timeoutDuration / 1000).toFixed(2)}s for call ${session.callSid}`);
   session.silenceTimeoutId = setTimeout(async () => {
     console.log(`[Silence Timer] ⏱️ Silence threshold crossed for call ${session.callSid}`);
     await handleSilenceTimeout(session, twilioWs);
-  }, SILENCE_TIMEOUT);
+  }, timeoutDuration);
 }
 
 async function handleSilenceTimeout(session: CallSession, twilioWs: WebSocket) {
@@ -690,10 +739,30 @@ async function handleSilenceTimeout(session: CallSession, twilioWs: WebSocket) {
       session.agentIsSpeaking = true;
       const ttsStream = await createTtsStream(session, twilioWs, undefined, () => {
         session.agentIsSpeaking = true;
+        playbackStates.set(session.callSid, {
+          playbackStartTime: Date.now()
+        });
       }, () => {
-        console.log(`[Silence] Check-in prompt completed playing. Re-arming silence timer.`);
-        session.agentIsSpeaking = false;
-        resetSilenceTimer(session, twilioWs);
+        console.log(`[Silence] Check-in prompt completed playing callback.`);
+        const pState = playbackStates.get(session.callSid) || {};
+        const durationSec = estimateAudioDuration(SILENCE_CHECK_IN_MESSAGE);
+        const elapsed = Date.now() - (pState.playbackStartTime || Date.now());
+        const delayMs = Math.max(0, (durationSec * 1000) - elapsed);
+
+        if (pState.activePlaybackTimerId) {
+          clearTimeout(pState.activePlaybackTimerId);
+        }
+
+        pState.activePlaybackTimerId = setTimeout(() => {
+          pState.activePlaybackTimerId = undefined;
+          if (session.agentIsSpeaking && !session.ttsInterrupted) {
+            session.agentIsSpeaking = false;
+            // 4 seconds grace period for silence check-in responses
+            resetSilenceTimer(session, twilioWs, 4000);
+          }
+        }, delayMs);
+
+        playbackStates.set(session.callSid, pState);
       });
 
       console.log(`[TTS] 📤 Sending check-in prompt text to ElevenLabs: "${SILENCE_CHECK_IN_MESSAGE}"`);
@@ -734,11 +803,32 @@ async function triggerAgentGreeting(session: CallSession, twilioWs: WebSocket) {
   try {
     const ttsStream = await createTtsStream(session, twilioWs, undefined, () => {
       session.agentIsSpeaking = true;
+      playbackStates.set(session.callSid, {
+        playbackStartTime: Date.now()
+      });
     }, () => {
-      console.log(`[Server] Opening line completed playback for call ${session.callSid}. Unlocking interruptions.`);
-      session.isPlayingOpeningLine = false;
-      session.agentIsSpeaking = false;
-      resetSilenceTimer(session, twilioWs);
+      console.log(`[Server] Opening line completed playback callback for call ${session.callSid}. Unlocking interruptions.`);
+      
+      const pState = playbackStates.get(session.callSid) || {};
+      const durationSec = estimateAudioDuration(session.openingLine || '');
+      const elapsed = Date.now() - (pState.playbackStartTime || Date.now());
+      const delayMs = Math.max(0, (durationSec * 1000) - elapsed);
+
+      if (pState.activePlaybackTimerId) {
+        clearTimeout(pState.activePlaybackTimerId);
+      }
+
+      pState.activePlaybackTimerId = setTimeout(() => {
+        pState.activePlaybackTimerId = undefined;
+        if (session.agentIsSpeaking && !session.ttsInterrupted) {
+          session.isPlayingOpeningLine = false;
+          session.agentIsSpeaking = false;
+          // 4 seconds grace period for opening line
+          resetSilenceTimer(session, twilioWs, 4000);
+        }
+      }, delayMs);
+
+      playbackStates.set(session.callSid, pState);
     });
 
     // Send the fixed opening line directly to ElevenLabs stream
@@ -768,6 +858,13 @@ async function triggerAgentGreeting(session: CallSession, twilioWs: WebSocket) {
  */
 async function safeCleanupSession(session: CallSession): Promise<void> {
   clearSilenceTimer(session);
+  const pState = playbackStates.get(session.callSid);
+  if (pState && pState.activePlaybackTimerId) {
+    console.log(`[Server] Clearing active playback timer for call ${session.callSid}`);
+    clearTimeout(pState.activePlaybackTimerId);
+  }
+  playbackStates.delete(session.callSid);
+
   if (session.maxCallTimeoutId) {
     console.log(`[Server] Clearing hard max duration timer for call ${session.callSid}`);
     clearTimeout(session.maxCallTimeoutId);
