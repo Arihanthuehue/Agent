@@ -3,7 +3,7 @@ import { server } from './server';
 import { config } from './config';
 import { initializeStorageBucket } from './supabase';
 
-const PORT = config.port;
+const PORT = process.env.PORT || 3000;
 
 async function boot() {
   if (process.env.NODE_TLS_REJECT_UNAUTHORIZED === '0') {
