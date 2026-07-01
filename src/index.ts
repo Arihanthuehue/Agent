@@ -1,6 +1,5 @@
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 import { server } from './server';
-import { config } from './config';
 import { initializeStorageBucket } from './supabase';
 
 const PORT = process.env.PORT || 3000;
