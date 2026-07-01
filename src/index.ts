@@ -1,3 +1,4 @@
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 import { server } from './server';
 import { config } from './config';
 import { initializeStorageBucket } from './supabase';
@@ -5,6 +6,9 @@ import { initializeStorageBucket } from './supabase';
 const PORT = config.port;
 
 async function boot() {
+  if (process.env.NODE_TLS_REJECT_UNAUTHORIZED === '0') {
+    console.warn('⚠️ WARNING: NODE_TLS_REJECT_UNAUTHORIZED is set to "0". SSL/TLS certificate validation is disabled! Do not use this in production.');
+  }
   console.log('🤖 Starting My Own Vapi Voice Orchestrator Server...');
 
   // Initialize database and storage bucket
