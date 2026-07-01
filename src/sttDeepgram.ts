@@ -38,12 +38,14 @@ export class DeepgramSttProvider implements SttProvider {
 
     const url = `wss://api.deepgram.com/v2/listen?model=flux-general-multi&encoding=mulaw&sample_rate=8000&${hints}`;
 
-    console.log(`[DeepgramStt] Connecting to Deepgram Flux WS: ${url}`);
+    const maskedKey = apiKey ? `${apiKey.slice(0, 8)}...` : 'undefined/empty';
+    console.log(`[DeepgramStt] Connecting to Deepgram Flux WS: ${url} (using key: ${maskedKey})`);
 
     this.ws = new WebSocket(url, {
       headers: {
         Authorization: `Token ${apiKey}`
-      }
+      },
+      rejectUnauthorized: false
     });
 
     this.sttPromise = new Promise<void>((resolve) => {
